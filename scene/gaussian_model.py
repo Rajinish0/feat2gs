@@ -718,6 +718,11 @@ class Feat2GaussianModel(GaussianModel):
                 'name': key
             })
 
+        if 'f_rest' not in self.gs_params_group.get('head', []) and \
+           'f_rest' not in self.gs_params_group.get('opt', []):
+            print("SETTING F_REST")
+            self.f_rest = self.param_init["f_rest"]
+
         # ## FOR DEBUGGING
         # l += [
         #     {'params': self.head_f_dc.parameters(), 'lr': warm_start_lr, "name": "warm_start_f_dc"},
