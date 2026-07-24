@@ -125,17 +125,28 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         gaussians.inference()
 
-        pretrained_loss_dict = {
-            'xyz': l1_loss(gaussians._xyz, gaussians.param_init['xyz']),
-            'f_dc': l1_loss(gaussians._features_dc, gaussians.param_init['f_dc']),
-            'f_rest': l1_loss(gaussians._features_rest, gaussians.param_init['f_rest']),
-            'opacity': l1_loss(gaussians._opacity, gaussians.param_init['opacity']),
-            'scaling': l1_loss(gaussians._scaling, gaussians.param_init['scaling']),
-            'rotation': l1_loss(gaussians._rotation, gaussians.param_init['rotation']),
-            'pose': l1_loss(gaussians.P, gaussians.param_init['pose']),
-            # 'focal': l1_loss(gaussians._focal_params, gaussians.param_init['focal']),
-            'pc_feat':l1_loss(gaussians.pc_feat, gaussians.param_init['pc_feat']),
-            }
+        # pretrained_loss_dict = {
+        #     'xyz': l1_loss(gaussians._xyz, gaussians.param_init['xyz']),
+        #     'f_dc': l1_loss(gaussians._features_dc, gaussians.param_init['f_dc']),
+        #     'f_rest': l1_loss(gaussians._features_rest, gaussians.param_init['f_rest']),
+        #     'opacity': l1_loss(gaussians._opacity, gaussians.param_init['opacity']),
+        #     'scaling': l1_loss(gaussians._scaling, gaussians.param_init['scaling']),
+        #     'rotation': l1_loss(gaussians._rotation, gaussians.param_init['rotation']),
+        #     'pose': l1_loss(gaussians.P, gaussians.param_init['pose']),
+        #     # 'focal': l1_loss(gaussians._focal_params, gaussians.param_init['focal']),
+        #     'pc_feat':l1_loss(gaussians.pc_feat, gaussians.param_init['pc_feat']),
+        #     }
+
+        pretrained_loss_dict = dict()
+
+        if 'xyz' in gs_params_group['head']: pretrained_loss_dict['xyz'] = l1_loss(gaussians._xyz, gaussians.param_init['xyz'])
+        if 'f_dc' in gs_params_group['head']: pretrained_loss_dict['f_dc'] = l1_loss(gaussians._features_dc, gaussians.param_init['f_dc'])
+        if 'f_rest' in gs_params_group['head']: pretrained_loss_dict['f_rest'] = l1_loss(gaussians._features_rest, gaussians.param_init['f_rest'])
+        if 'opacity' in gs_params_group['head']: pretrained_loss_dict['opacity'] = l1_loss(gaussians._opacity, gaussians.param_init['opacity'])
+        if 'scaling' in gs_params_group['head']: pretrained_loss_dict['scaling'] = l1_loss(gaussians._scaling, gaussians.param_init['scaling'])
+        if 'rotation' in gs_params_group['head']: pretrained_loss_dict['rotation'] = l1_loss(gaussians._rotation, gaussians.param_init['rotation'])
+        if 'pose' in gs_params_group['head']: pretrained_loss_dict['pose'] = l1_loss(gaussians.P, gaussians.param_init['pose'])
+        if 'pc_feat' in gs_params_group['head']: pretrained_loss_dict['pc_feat'] =l1_loss(gaussians.pc_feat, gaussians.param_init['pc_feat'])
 
         if iteration <= warm_iter:
             loss = sum(loss for key, loss in pretrained_loss_dict.items() if key in gs_params_group['head'])
