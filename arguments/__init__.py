@@ -103,6 +103,18 @@ class ModelParams(ParamGroup):
                 'head': ['xyz', 'scaling', 'rotation', 'opacity', 'f_dc', 'f_rest'],
                 'opt':['pc_feat']
                 }, 
+            'S':{
+                'head': ['f_rest'],
+                'opt':['xyz', 'scaling', 'rotation', 'opacity', 'f_dc']
+                },
+            'D':{
+                'head':['f_dc'],
+                'opt':['xyz','scaling','rotation','opacity']
+                },
+            'Sft':{
+                'head': ['f_rest'],
+                'opt':['xyz', 'scaling', 'rotation', 'opacity', 'f_dc', 'pc_feat']
+                },
         }
         super().__init__(parser, "Loading Parameters", sentinel)
 

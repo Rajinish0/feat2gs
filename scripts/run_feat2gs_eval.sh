@@ -2,8 +2,8 @@
 
 GPU_ID=0
 OUTPUT_ROOT="/home/stud124/output/Feat2gs"
-#DATA_ROOT_DIR="/home/stud124/dataset/Feat2GS_Dataset"
-DATA_ROOT_DIR="/home/stud124/dset/Feat2GS"
+DATA_ROOT_DIR="/home/stud124/dataset/Feat2GS_Dataset"
+#DATA_ROOT_DIR="/home/stud124/dset/Feat2GS"
 DATASET_SPLIT_JSON="${DATA_ROOT_DIR}/dataset_split.json"
 
 declare -A SCENES
@@ -17,14 +17,14 @@ declare -A SCENES
     # xbox
 #)
 
-# declare -a SCENES_refnerf=(
+declare -a SCENES_refnerf=(
     # car
-    # ball
+    ball
     # coffee
     # helmet
     # teapot
     # toaster
-# )
+)
 
 # declare -a SCENES_DL3DV=(
 #     Center
@@ -58,13 +58,13 @@ declare -A SCENES
 #     # stump
 # )
 
-declare -a SCENES_Tanks=(
+# declare -a SCENES_Tanks=(
 #     Auditorium
 #     Caterpillar
 #     Family
 #     Ignatius
-     Train
-)
+#     Train
+# )
 
 # declare -a SCENES_Infer=(
 #     erhai
@@ -92,13 +92,13 @@ declare -a SCENES_Tanks=(
 RENDER_TRAJ=${RENDER_TRAJ:-interpolated} 
 
 ## Dataset
-# SCENES[refnerf]="${SCENES_refnerf[*]}"
+SCENES[refnerf]="${SCENES_refnerf[*]}"
 # SCENES[Casual]="${SCENES_Casual[*]}"
 # SCENES[DL3DV]="${SCENES_DL3DV[*]}"
 # SCENES[LLFF]="${SCENES_LLFF[*]}"
 # SCENES[MVimgNet]="${SCENES_MVimgNet[*]}"
 # SCENES[MipNeRF360]="${SCENES_MipNeRF360[*]}"
-SCENES[Tanks]="${SCENES_Tanks[*]}"
+# SCENES[Tanks]="${SCENES_Tanks[*]}"
 # # SCENES[Infer]="${SCENES_Infer[*]}" # Only for inference, no test views, pls COMMENDED OUT STEP(3)(4)(5)!
 
 # DUSt3R/MASt3R initialization
@@ -140,6 +140,8 @@ METHOD=feat2gs
 
 # Probing modes: G:Geometry, T:Texture, A:All, ft:finetune
 MODELS=(
+    # D
+    # S
     G
     T
     # A
@@ -244,7 +246,7 @@ run_process() {
     [ "$PCA_DIM" != "None" ] && CMDS[0]+=" --feat_dim ${PCA_DIM}" && CMDS[1]+=" --feat_dim ${PCA_DIM}"
     [ "$VIS_FEAT" = True ] && CMDS[0]+=" --vis_feat"
 
-    execute_command "${SCENE}: STEP(1) DUSt3R initialization & Feature extraction" "${CMDS[0]}" "$MODEL_PATH"
+    #execute_command "${SCENE}: STEP(1) DUSt3R initialization & Feature extraction" "${CMDS[0]}" "$MODEL_PATH"
     execute_command "${SCENE}: STEP(2) Readout 3DGS from features & Jointly optimize pose" "${CMDS[1]}" "$MODEL_PATH"
     execute_command "${SCENE}: STEP(3) Test pose initialization" "${CMDS[2]}" "$MODEL_PATH"
     execute_command "${SCENE}: STEP(4) Render test view for evaluation" "${CMDS[3]}" "$MODEL_PATH"
