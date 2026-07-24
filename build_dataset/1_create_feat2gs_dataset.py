@@ -48,8 +48,8 @@ Feat2GS_Dataset/
                 ...
 """
 
-root_dir = Path('/home/chenyue/dataset/Feat2GS_Dataset') # build dataset
-base_path = Path('/home/chenyue/dataset/eval_tmp_data') # eval_tmp_data dir
+root_dir = Path('/home/stud124/dataset/Feat2GS_Dataset') # build dataset
+base_path = Path('/home/stud124/dataset/eval_tmp_data') # eval_tmp_data dir
 DL3DV_source = Path('/home/chenyue/.cache/huggingface/hub/datasets--DL3DV--DL3DV-10K-Sample/snapshots/76acf288db94245ceead597dd89ebbdd5e11bc6c/')   # download DL3DV
 DTU_source = Path('/home/chenyue/dataset/dtu_test_mvsnet_release/')   # download DL3DV
 

@@ -1,20 +1,30 @@
 #! /bin/bash
 
 GPU_ID=0
-OUTPUT_ROOT="/home/chenyue/output/Feat2gs"
-DATA_ROOT_DIR="/home/chenyue/dataset/Feat2GS_Dataset"
+OUTPUT_ROOT="/home/stud124/output/Feat2gs"
+#DATA_ROOT_DIR="/home/stud124/dataset/Feat2GS_Dataset"
+DATA_ROOT_DIR="/home/stud124/dset/Feat2GS"
 DATASET_SPLIT_JSON="${DATA_ROOT_DIR}/dataset_split.json"
 
 declare -A SCENES
 
 # Scenes
-declare -a SCENES_Casual=(
+#declare -a SCENES_Casual=(
     # erhai
     # paper2
-    plushies
+ #   plushies
     # stuff
     # xbox
-)
+#)
+
+# declare -a SCENES_refnerf=(
+    # car
+    # ball
+    # coffee
+    # helmet
+    # teapot
+    # toaster
+# )
 
 # declare -a SCENES_DL3DV=(
 #     Center
@@ -48,13 +58,13 @@ declare -a SCENES_Casual=(
 #     # stump
 # )
 
-# declare -a SCENES_Tanks=(
+declare -a SCENES_Tanks=(
 #     Auditorium
 #     Caterpillar
 #     Family
 #     Ignatius
-#     Train
-# )
+     Train
+)
 
 # declare -a SCENES_Infer=(
 #     erhai
@@ -82,12 +92,13 @@ declare -a SCENES_Casual=(
 RENDER_TRAJ=${RENDER_TRAJ:-interpolated} 
 
 ## Dataset
-SCENES[Casual]="${SCENES_Casual[*]}"
+# SCENES[refnerf]="${SCENES_refnerf[*]}"
+# SCENES[Casual]="${SCENES_Casual[*]}"
 # SCENES[DL3DV]="${SCENES_DL3DV[*]}"
 # SCENES[LLFF]="${SCENES_LLFF[*]}"
 # SCENES[MVimgNet]="${SCENES_MVimgNet[*]}"
 # SCENES[MipNeRF360]="${SCENES_MipNeRF360[*]}"
-# SCENES[Tanks]="${SCENES_Tanks[*]}"
+SCENES[Tanks]="${SCENES_Tanks[*]}"
 # # SCENES[Infer]="${SCENES_Infer[*]}" # Only for inference, no test views, pls COMMENDED OUT STEP(3)(4)(5)!
 
 # DUSt3R/MASt3R initialization
@@ -130,7 +141,7 @@ METHOD=feat2gs
 # Probing modes: G:Geometry, T:Texture, A:All, ft:finetune
 MODELS=(
     G
-    # T
+    T
     # A
     # # Gft
     # # Tft
@@ -150,6 +161,11 @@ execute_command() {
 
     echo "${step_name}"
     eval "$command"
+
+    if [ $? -ne 0 ]; then
+       echo "!!! FAILED: ${step_name}"
+       exit 1
+    fi
 }
 
 run_process() {

@@ -16,8 +16,8 @@ eval_tmp_data/
             ...
 """
 
-datasets_root = "/home/chenyue/dataset/eval_tmp_data/"
-json_file = "/home/chenyue/dataset/Feat2GS_Dataset/dataset_split.json"
+datasets_root = "/home/stud124/dataset/eval_tmp_data/"
+json_file = "/home/stud124/dataset/Feat2GS_Dataset/dataset_split.json"
 
 DL3DV_HASH_MAPPING = {
     "Center": "cd9c981eeb4a9091547af19181b382698e9d9eee0a838c7c9783a8a268af6aee",
