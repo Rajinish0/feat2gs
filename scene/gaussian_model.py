@@ -186,8 +186,9 @@ class GaussianModel:
 
     @property
     def get_features(self):
-        features_dc = self._features_dc
-        features_rest = self._features_rest
+        features_dc = self._features_dc.cuda()
+        features_rest = self._features_rest.cuda()
+        #print(features_dc.shape, features_rest.shape, features_dc, features_rest)
         return torch.cat((features_dc, features_rest), dim=1)
 
     @property
@@ -285,8 +286,9 @@ class GaussianModel:
         # All channels except the 3 DC
         for i in range(self._features_dc.shape[1]*self._features_dc.shape[2]):
             l.append('f_dc_{}'.format(i))
-        for i in range(self._features_rest.shape[1]*self._features_rest.shape[2]):
-            l.append('f_rest_{}'.format(i))
+        if self._features_rest.numel() != 0:
+            for i in range(self._features_rest.shape[1]*self._features_rest.shape[2]):
+                l.append('f_rest_{}'.format(i))
         l.append('opacity')
         for i in range(self._scaling.shape[1]):
             l.append('scale_{}'.format(i))
@@ -300,7 +302,10 @@ class GaussianModel:
         xyz = self._xyz.detach().cpu().numpy()
         normals = np.zeros_like(xyz)
         f_dc = self._features_dc.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
-        f_rest = self._features_rest.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
+        if self._features_rest.numel() == 0:
+            f_rest = np.empty((self._xyz.shape[0], 0))
+        else:
+            f_rest = self._features_rest.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
         opacities = self._opacity.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
@@ -599,7 +604,10 @@ class Feat2GaussianModel(GaussianModel):
             if key == 'f_dc':
                 self._features_dc = getattr(self, f'head_{key}')(feat_in, self.param_init[key].view(-1, 3)).reshape(-1, 1, 3)
             elif key == 'f_rest':
-                self._features_rest = getattr(self, f'head_{key}')(feat_in.detach(), self.param_init[key].view(-1, self.sh_coeffs)).reshape(-1, self.sh_coeffs // 3, 3)
+                if self.sh_coeffs > 0:
+                    self._features_rest = getattr(self, f'head_{key}')(feat_in.detach(), self.param_init[key].view(-1, self.sh_coeffs)).reshape(-1, self.sh_coeffs // 3, 3)
+                else:
+                    self._features_rest = torch.zeros(self.features_dc.shape[0], 0, 3, device=feat_in.device)
             else:
                 setattr(self, f'_{key}', getattr(self, f'head_{key}')(feat_in, self.param_init[key]))
 
@@ -718,10 +726,10 @@ class Feat2GaussianModel(GaussianModel):
                 'name': key
             })
 
-        if 'f_rest' not in self.gs_params_group.get('head', []) and \
-           'f_rest' not in self.gs_params_group.get('opt', []):
-            print("SETTING F_REST")
-            self.f_rest = self.param_init["f_rest"]
+        #if 'f_rest' not in self.gs_params_group.get('head', []) and \
+        #   'f_rest' not in self.gs_params_group.get('opt', []):
+        #    print("SETTING F_REST")
+        #    self.f_rest = self.param_init["f_rest"]
 
         # ## FOR DEBUGGING
         # l += [
