@@ -55,6 +55,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     feat_type = '-'.join(args.feat_type)
     feat_dim = args.feat_dim if feat_type not in ['iuv', 'iuvrgb'] else dataset.feat_default_dim[feat_type]
     gs_params_group = dataset.gs_params_group[args.model]
+    if 'f_rest' not in (gs_params_group['head'] + gs_params_group['opt']):
+        print("NO F_REST FOUND", gs_params_group)
+        dataset.sh_degree = 0
     gaussians = Feat2GaussianModel(dataset.sh_degree, feat_dim, gs_params_group)
     scene = Scene(dataset, gaussians, opt=args, shuffle=True)                                                                      
     gaussians.training_setup(opt)
@@ -75,7 +78,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
 
-    warm_iter = 1000
+    warm_iter = 1000 if len(gs_params_group.get('head', [])) > 0 else 0
 
     start = perf_counter()
     for iteration in range(first_iter, opt.iterations + 1):        
