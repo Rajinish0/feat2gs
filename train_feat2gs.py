@@ -25,6 +25,9 @@ from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 from utils.pose_utils import get_camera_from_tensor
 
+import wandb
+from wandb_utils import init_probe_run
+
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -43,10 +46,29 @@ def save_pose(path, quat_pose, train_cams, llffhold=2):
     for i in range(len(index_colmap)):
         ind = index_colmap.index(i+1)
         bb=output_poses[ind]
-        bb = bb#.inverse()
+        bb = bb
         colmap_poses.append(bb)
     colmap_poses = torch.stack(colmap_poses).detach().cpu().numpy()
     np.save(path, colmap_poses)
+
+
+def log_sh_magnitudes(gaussians, iteration):
+    with torch.no_grad():
+        f_dc = gaussians._features_dc.reshape(gaussians._features_dc.shape[0], -1)
+        dc_norm = f_dc.norm(dim=1)
+        log_dict = {
+            "sh/f_dc_norm_mean": dc_norm.mean().item(),
+            "sh/f_dc_norm_std": dc_norm.std().item(),
+        }
+        if gaussians._features_rest.numel() > 0:
+            f_rest = gaussians._features_rest.reshape(gaussians._features_rest.shape[0], -1)
+            rest_norm = f_rest.norm(dim=1)
+            log_dict.update({
+                "sh/f_rest_norm_mean": rest_norm.mean().item(),
+                "sh/f_rest_norm_std": rest_norm.std().item(),
+                "sh/f_rest_to_f_dc_ratio": (rest_norm.mean() / dc_norm.mean().clamp_min(1e-8)).item(),
+            })
+        wandb.log(log_dict, step=iteration)
 
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, args):
@@ -55,9 +77,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     feat_type = '-'.join(args.feat_type)
     feat_dim = args.feat_dim if feat_type not in ['iuv', 'iuvrgb'] else dataset.feat_default_dim[feat_type]
     gs_params_group = dataset.gs_params_group[args.model]
-    if 'f_rest' not in (gs_params_group['head'] + gs_params_group['opt']):
-        print("NO F_REST FOUND", gs_params_group)
-        dataset.sh_degree = 0
     gaussians = Feat2GaussianModel(dataset.sh_degree, feat_dim, gs_params_group)
     scene = Scene(dataset, gaussians, opt=args, shuffle=True)                                                                      
     gaussians.training_setup(opt)
@@ -82,21 +101,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
     start = perf_counter()
     for iteration in range(first_iter, opt.iterations + 1):        
-        # if network_gui.conn == None:
-        #     network_gui.try_connect()
-        # while network_gui.conn != None:
-        #     try:
-        #         net_image_bytes = None
-        #         custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
-        #         if custom_cam != None:
-        #             net_image = render(custom_cam, gaussians, pipe, background, scaling_modifer)["render"]
-        #             net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
-        #         network_gui.send(net_image_bytes, dataset.source_path)
-        #         if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
-        #             break
-        #     except Exception as e:
-        #         network_gui.conn = None
-
         iter_start.record()
 
         if iteration > warm_iter:
@@ -110,17 +114,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if args.optim_pose==False:
             gaussians.P.requires_grad_(False)
 
-        # (DISABLED) Every 1000 its we increase the levels of SH up to a maximum degree
-        # if iteration % 1000 == 0:
-        #     gaussians.oneupSHdegree()
-
-        # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
         pose = gaussians.get_RT(viewpoint_cam.uid)
 
-        # Render
         if (iteration - 1) == debug_from:
             pipe.debug = True
 
@@ -128,28 +126,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         gaussians.inference()
 
-        # pretrained_loss_dict = {
-        #     'xyz': l1_loss(gaussians._xyz, gaussians.param_init['xyz']),
-        #     'f_dc': l1_loss(gaussians._features_dc, gaussians.param_init['f_dc']),
-        #     'f_rest': l1_loss(gaussians._features_rest, gaussians.param_init['f_rest']),
-        #     'opacity': l1_loss(gaussians._opacity, gaussians.param_init['opacity']),
-        #     'scaling': l1_loss(gaussians._scaling, gaussians.param_init['scaling']),
-        #     'rotation': l1_loss(gaussians._rotation, gaussians.param_init['rotation']),
-        #     'pose': l1_loss(gaussians.P, gaussians.param_init['pose']),
-        #     # 'focal': l1_loss(gaussians._focal_params, gaussians.param_init['focal']),
-        #     'pc_feat':l1_loss(gaussians.pc_feat, gaussians.param_init['pc_feat']),
-        #     }
-
-        pretrained_loss_dict = dict()
-
-        if 'xyz' in gs_params_group['head']: pretrained_loss_dict['xyz'] = l1_loss(gaussians._xyz, gaussians.param_init['xyz'])
-        if 'f_dc' in gs_params_group['head']: pretrained_loss_dict['f_dc'] = l1_loss(gaussians._features_dc, gaussians.param_init['f_dc'])
-        if 'f_rest' in gs_params_group['head']: pretrained_loss_dict['f_rest'] = l1_loss(gaussians._features_rest, gaussians.param_init['f_rest'])
-        if 'opacity' in gs_params_group['head']: pretrained_loss_dict['opacity'] = l1_loss(gaussians._opacity, gaussians.param_init['opacity'])
-        if 'scaling' in gs_params_group['head']: pretrained_loss_dict['scaling'] = l1_loss(gaussians._scaling, gaussians.param_init['scaling'])
-        if 'rotation' in gs_params_group['head']: pretrained_loss_dict['rotation'] = l1_loss(gaussians._rotation, gaussians.param_init['rotation'])
-        if 'pose' in gs_params_group['head']: pretrained_loss_dict['pose'] = l1_loss(gaussians.P, gaussians.param_init['pose'])
-        if 'pc_feat' in gs_params_group['head']: pretrained_loss_dict['pc_feat'] =l1_loss(gaussians.pc_feat, gaussians.param_init['pc_feat'])
+        pretrained_loss_dict = {
+            'xyz': l1_loss(gaussians._xyz, gaussians.param_init['xyz']),
+            'f_dc': l1_loss(gaussians._features_dc, gaussians.param_init['f_dc']),
+            'f_rest': l1_loss(gaussians._features_rest, gaussians.param_init['f_rest']),
+            'opacity': l1_loss(gaussians._opacity, gaussians.param_init['opacity']),
+            'scaling': l1_loss(gaussians._scaling, gaussians.param_init['scaling']),
+            'rotation': l1_loss(gaussians._rotation, gaussians.param_init['rotation']),
+            'pose': l1_loss(gaussians.P, gaussians.param_init['pose']),
+            'pc_feat':l1_loss(gaussians.pc_feat, gaussians.param_init['pc_feat']),
+            }
 
         if iteration <= warm_iter:
             loss = sum(loss for key, loss in pretrained_loss_dict.items() if key in gs_params_group['head'])
@@ -159,50 +145,38 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             render_pkg = render_gsplat(viewpoint_cam, gaussians, pipe, bg, camera_pose=pose)
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
-            # Loss
             gt_image = viewpoint_cam.original_image.cuda()
             Ll1 = l1_loss(image, gt_image)
             loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) 
 
             if feat_type in ['iuv', 'iuvrgb']:
-                # Add scaling regularization for 'iuv' and 'iuvrgb' features
-                # Prevents their gaussians scale from becoming too large to cause CUDA out of memory
                 loss += l1_loss(gaussians._scaling, gaussians.param_init['scaling']) * 0.1
 
         loss.backward()
         iter_end.record()
 
         with torch.no_grad():
-
-            # Progress bar
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             if iteration % 10 == 0:
                 progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
                 progress_bar.update(10)
+                wandb.log({
+                    "train/loss": loss.item(),
+                    "train/ema_loss": ema_loss_for_log,
+                    "train/l1": Ll1.item(),
+                }, step=iteration)
             if iteration == opt.iterations:
                 progress_bar.close()
 
-            # Log and save
+            if iteration % 100 == 0:
+                log_sh_magnitudes(gaussians, iteration)
+
             training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render_gsplat, (pipe, background), pretrained_loss_dict)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
                 save_pose(scene.model_path + 'pose' + f"/pose_{iteration}.npy", gaussians.P, train_cams_init)
 
-            # (DISABLED) Densification
-            # if iteration < opt.densify_until_iter:
-                # Keep track of max radii in image-space for pruning
-                # gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                # gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
-
-                # if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
-                #     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                #     gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-                
-                # if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
-                #     gaussians.reset_opacity()
-
-            # Optimizer step
             if iteration < opt.iterations:
                 gaussians.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none = True)
@@ -213,12 +187,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 
         end = perf_counter()
         train_time = end - start
-    
-    # We commented out log&save operations, and then calculate train time.
-    # train_time = np.array(train_time)
-    # print("total_test_time_epoch: ", 1)
-    # print("instantsplat_train_time_mean: ", train_time.mean())
-    # print("instantsplat_train_time_median: ", np.median(train_time))
+
 
 def prepare_output_and_logger(args, iteration=None):    
     if not args.model_path:
@@ -228,19 +197,18 @@ def prepare_output_and_logger(args, iteration=None):
             unique_str = str(uuid.uuid4())
         args.model_path = os.path.join("./output/", unique_str[0:10])
         
-    # Set up output folder
     print("Output folder: {}".format(args.model_path))
     os.makedirs(args.model_path, exist_ok = True)
     with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
         cfg_log_f.write(str(Namespace(**vars(args))))
 
-    # Create Tensorboard writer
     tb_writer = None
     if TENSORBOARD_FOUND:
         tb_writer = SummaryWriter(os.path.join(args.model_path, f"log_{iteration}"))
     else:
         print("Tensorboard not available: not logging progress")
     return tb_writer
+
 
 def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs, prop_pred=None):
     if tb_writer:
@@ -250,7 +218,6 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         for key, values in prop_pred.items():
             tb_writer.add_scalar(f'train_patches/delta_{key}', values.item(), iteration)
 
-    # Report test and samples of training set
     if iteration in testing_iterations:
         torch.cuda.empty_cache()
         validation_configs = ({'name': 'test', 'cameras' : scene.getTestCameras()}, 
@@ -271,6 +238,13 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
                         if iteration == testing_iterations[0]:
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
+                    if wandb.run is not None and idx < 3:
+                        wandb.log({
+                            f"images/{config['name']}_{viewpoint.image_name}_render": wandb.Image(
+                                image.clamp(0, 1).contiguous().permute(1, 2, 0).cpu().numpy()),
+                            f"images/{config['name']}_{viewpoint.image_name}_gt": wandb.Image(
+                                gt_image.clamp(0, 1).contiguous().permute(1, 2, 0).cpu().numpy()),
+                        }, step=iteration)
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
                 psnr_test /= len(config['cameras'])
@@ -279,14 +253,19 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
+                if wandb.run is not None:
+                    wandb.log({
+                        f"eval/{config['name']}_l1": l1_test.item(),
+                        f"eval/{config['name']}_psnr": psnr_test.item(),
+                    }, step=iteration)
 
         if tb_writer:
             tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
             tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
         torch.cuda.empty_cache()
 
+
 if __name__ == "__main__":
-    # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
     lp = ModelParams(parser)
     op = OptimizationParams(parser)
@@ -318,13 +297,13 @@ if __name__ == "__main__":
     
     print("Optimizing " + args.model_path)
 
-    # Initialize system state (RNG)
-    # safe_state(args.quiet)
+    init_probe_run(args.model_path, job_type="train", extra_config={
+        "n_views": args.n_views, "iterations": args.iterations, "model": args.model,
+        "feat_type": args.feat_type, "method": args.method,
+    })
 
-    # Start GUI server, configure and run training
-    # network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args)
 
-    # All done
     print("\nTraining complete.")
+    wandb.finish()
