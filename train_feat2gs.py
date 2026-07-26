@@ -51,6 +51,14 @@ def save_pose(path, quat_pose, train_cams, llffhold=2):
     colmap_poses = torch.stack(colmap_poses).detach().cpu().numpy()
     np.save(path, colmap_poses)
 
+def tensor_to_heatmap(tensor_2d):
+    # tensor_2d: shape [H, W] with values normalized between 0 and 1
+    x = tensor_2d.clamp(0, 1)
+    r = torch.clamp(x * 3.0, 0.0, 1.0)
+    g = torch.clamp(x * 3.0 - 1.0, 0.0, 1.0)
+    b = torch.clamp(x * 3.0 - 2.0, 0.0, 1.0)
+    return torch.stack([r, g, b], dim=0)  # Shape [3, H, W]
+
 
 def log_sh_magnitudes(gaussians, iteration):
     with torch.no_grad():
@@ -239,12 +247,37 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                         if iteration == testing_iterations[0]:
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
                     if wandb.run is not None and idx < 3:
-                        wandb.log({
-                            f"images/{config['name']}_{viewpoint.image_name}_render": wandb.Image(
-                                image.clamp(0, 1).contiguous().permute(1, 2, 0).cpu().numpy()),
-                            f"images/{config['name']}_{viewpoint.image_name}_gt": wandb.Image(
-                                gt_image.clamp(0, 1).contiguous().permute(1, 2, 0).cpu().numpy()),
-                        }, step=iteration)
+                        # --- 1. Generate Ablated (DC-only) Render ---
+                            saved_f_rest = scene.gaussians._features_rest.clone()
+                            scene.gaussians._features_rest.zero_()
+                            
+                            image_ablated = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs, camera_pose=pose)["render"], 0.0, 1.0)
+                            
+                            scene.gaussians._features_rest.copy_(saved_f_rest)
+                            
+                            # --- 2. Generate Diff Heatmap ---
+                            # Calculate mean absolute difference across RGB channels
+                            diff_map = torch.abs(image - image_ablated).mean(dim=0)
+                            
+                            # Normalize between 0 and 1 based on the max difference to maximize visual contrast
+                            diff_norm = diff_map / (diff_map.max() + 1e-8)
+                            
+                            # Apply heatmap colormap (turbo provides excellent contrast)
+                            diff_heatmap = tensor_to_heatmap(diff_norm)
+                            # cm = matplotlib.colormaps["turbo"]
+                            # diff_heatmap = cm(diff_norm.cpu().numpy())[..., 0:3] # Slice [..., 0:3] to drop the alpha channel
+                            
+                            # --- 3. Log all 4 images to WandB ---
+                            wandb.log({
+                                f"images/{config['name']}_{viewpoint.image_name}_render": wandb.Image(
+                                    image.clamp(0.0, 1.0).contiguous().permute(1, 2, 0).cpu().numpy()),
+                                f"images/{config['name']}_{viewpoint.image_name}_gt": wandb.Image(
+                                    gt_image.clamp(0.0, 1.0).contiguous().permute(1, 2, 0).cpu().numpy()),
+                                f"images/{config['name']}_{viewpoint.image_name}_render_dc_only": wandb.Image(
+                                    image_ablated.clamp(0.0, 1.0).contiguous().permute(1, 2, 0).cpu().numpy()),
+                                f"images/{config['name']}_{viewpoint.image_name}_diff_heatmap": wandb.Image(
+                                    diff_heatmap.clamp(0.0, 1.0).contiguous().permute(1, 2, 0).cpu().numpy()),
+                            }, step=iteration)
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
                 psnr_test /= len(config['cameras'])
