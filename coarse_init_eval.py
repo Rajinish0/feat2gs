@@ -72,8 +72,18 @@ if __name__ == '__main__':
 
     # Feature extraction for per point(per pixel)
     if args.feat_type:
+        need_init_scene = method in args.feat_type
+        extractor_kwargs = dict(pairs=pairs, train_img_list=train_img_list)
+        if need_init_scene:
+            extractor_kwargs['scene'] = scene
+            extractor_kwargs['model'] = model
+        else:
+            del scene, model
+            import gc; gc.collect()
+            torch.cuda.empty_cache()
         extractor = FeatureExtractor(images, args, method)
-        feats = extractor(scene=scene, model=model, pairs=pairs, train_img_list=train_img_list)
+        feats = extractor(**extractor_kwargs)
+        #feats = extractor(scene=scene, model=model, pairs=pairs, train_img_list=train_img_list)
 
         feat_type_str = '-'.join(extractor.feat_type)
         output_colmap_path = os.path.join(output_colmap_path, feat_type_str)
@@ -88,9 +98,11 @@ if __name__ == '__main__':
     pts_4_3dgs = np.concatenate([p[m] for p, m in zip(pts3d, confidence_masks)])
     color_4_3dgs = np.concatenate([p[m] for p, m in zip(imgs, confidence_masks)])
     color_4_3dgs = (color_4_3dgs * 255.0).astype(np.uint8)
+    #del pts3d, imgs
 
     if args.feat_type:
         feat_4_3dgs = np.concatenate([p[m] for p, m in zip(feats, confidence_masks)])
+        #del feats
         storePly(os.path.join(output_colmap_path, f"points3D.ply"), pts_4_3dgs, color_4_3dgs, feat_4_3dgs)
     else:
         storePly(os.path.join(output_colmap_path, "points3D.ply"), pts_4_3dgs, color_4_3dgs)
