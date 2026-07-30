@@ -155,7 +155,7 @@ class OneStepSDPipeline(StableDiffusionPipeline):
 
 
 class SDFeaturizer(torch.nn.Module):
-    def __init__(self, sd_id="stabilityai/stable-diffusion-2-1"):
+    def __init__(self, sd_id="sd2-community/stable-diffusion-2-1"):
         super().__init__()
 
         # breakpoint()

@@ -9,7 +9,7 @@ from .dift_sd import SDFeaturizer
 class DIFT(torch.nn.Module):
     def __init__(
         self,
-        model_id="stabilityai/stable-diffusion-2-1",
+        model_id="sd2-community/stable-diffusion-2-1",
         time_step=250,
         output="dense",
         layer=1,
