@@ -94,14 +94,13 @@ def render_set_specular_probe(model_path, name, iteration, views, gaussians, pip
         torchvision.utils.save_image(diff, os.path.join(diff_path, "{0:05d}".format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, "{0:05d}".format(idx) + ".png"))
         torchvision.utils.save_image(mask, os.path.join(msks_path, "{0:05d}".format(idx) + ".png"))
-
         if wandb.run is not None and idx < 3:
             wandb.log({
-                f"specular_probe_imgs/{view.image_name}_full": wandb.Image(rendering_full.cpu().numpy().transpose(1, 2, 0)),
-                f"specular_probe_imgs/{view.image_name}_ablated": wandb.Image(rendering_ablated.cpu().numpy().transpose(1, 2, 0)),
-                f"specular_probe_imgs/{view.image_name}_diff": wandb.Image(diff.cpu().numpy().transpose(1, 2, 0)),
-                f"specular_probe_imgs/{view.image_name}_gt": wandb.Image(gt.cpu().numpy().transpose(1, 2, 0)),
-            })
+                f"specular_probe_imgs/{view.image_name}_full": wandb.Image(rendering_full.clamp(0.0, 1.0).cpu().numpy().transpose(1, 2, 0)),
+                f"specular_probe_imgs/{view.image_name}_ablated": wandb.Image(rendering_ablated.clamp(0.0, 1.0).cpu().numpy().transpose(1, 2, 0)),
+                f"specular_probe_imgs/{view.image_name}_diff": wandb.Image(diff.clamp(0.0, 1.0).cpu().numpy().transpose(1, 2, 0)),
+                f"specular_probe_imgs/{view.image_name}_gt": wandb.Image(gt.clamp(0.0, 1.0).cpu().numpy().transpose(1, 2, 0)),
+                })
 
 
 def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, skip_test: bool, args):
