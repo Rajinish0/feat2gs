@@ -7,8 +7,7 @@ DATA_ROOT_DIR="/home/stud124/dataset/Feat2GS_Dataset"
 DATASET_SPLIT_JSON="${DATA_ROOT_DIR}/dataset_split.json"
 
 export TORCH_CUDA_ARCH_LIST="8.6"
-export TORCH_EXTENSIONS_DIR="/tmp/torch_ext_gpu0"
-export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+export TORCH_EXTENSIONS_DIR="/tmp/torch_ext_gpu2"
 
 declare -A SCENES
 
@@ -22,13 +21,13 @@ declare -A SCENES
 #)
 
 declare -a SCENES_refnerf=(
-    #car
+    toaster
+    teapot
     ball
-    #toaster
-    #coffee
-    #helmet
-    #teapot
-    #toaster
+    coffee
+    helmet
+    car
+    # teapot
 )
 
 # declare -a SCENES_DL3DV=(
@@ -114,17 +113,17 @@ POINTMAPS=(
 
 # Visual Foundation Models
 FEATURES=(
-    # dino_b16
-    radio
-    # dust3r
-    # mast3r
-    dift
-    #dinov2_b14
-    #clip_b16
-    #mae_b16
-    #midas_l16
-    #sam_base
-    #iuvrgb
+    #dino_b16
+    #radio
+    #dust3r
+    #mast3r
+    # dift
+    dinov2_b14
+    clip_b16
+    mae_b16
+    # midas_l16
+    # sam_base
+    # iuvrgb
     )
 
 get_train_view_count() {
@@ -145,24 +144,21 @@ METHOD=feat2gs
 
 # Probing modes: G:Geometry, T:Texture, A:All, ft:finetune
 MODELS=(
+    G
     #T
     #F
-    S
-    T
-    G
-    #G
-    #A
+    #S
     #D
     # S
     # F
-    # A
+    #A
     # # Gft
     # # Tft
     # # Aft
     )
 
 PCA_DIM=256
-VIS_FEAT=False
+VIS_FEAT=True
 
 gs_train_iter=8000
 
@@ -194,7 +190,7 @@ run_process() {
     local FEATURE_ARG="${FEATURE//-/ }"
     local CMDS=(
         # ----- (1) DUSt3R initialization & Feature extraction -----
-        "${CMD_PREFIX} ./coarse_init_eval2.py \
+        "${CMD_PREFIX} ./coarse_init_eval.py \
             --img_base_path ${BASE_FOLDER} \
             --n_views ${N_VIEW} \
             --focal_avg \
@@ -269,14 +265,14 @@ run_process() {
     [ "$PCA_DIM" != "None" ] && CMDS[0]+=" --feat_dim ${PCA_DIM}" && CMDS[1]+=" --feat_dim ${PCA_DIM}"
     [ "$VIS_FEAT" = True ] && CMDS[0]+=" --vis_feat"
 
-    #execute_command "${SCENE}: STEP(1) DUSt3R initialization & Feature extraction" "${CMDS[0]}" "$MODEL_PATH"
-    #execute_command "${SCENE}: STEP(2) Readout 3DGS from features & Jointly optimize pose" "${CMDS[1]}" "$MODEL_PATH"
-    #execute_command "${SCENE}: STEP(3) Test pose initialization" "${CMDS[2]}" "$MODEL_PATH"
+    execute_command "${SCENE}: STEP(1) DUSt3R initialization & Feature extraction" "${CMDS[0]}" "$MODEL_PATH"
+    execute_command "${SCENE}: STEP(2) Readout 3DGS from features & Jointly optimize pose" "${CMDS[1]}" "$MODEL_PATH"
+    execute_command "${SCENE}: STEP(3) Test pose initialization" "${CMDS[2]}" "$MODEL_PATH"
     #execute_command "${SCENE}: STEP(4) Render test view for evaluation" "${CMDS[3]}" "$MODEL_PATH"
     #execute_command "${SCENE}: STEP(5) Metric" "${CMDS[4]}" "$MODEL_PATH"
-    #execute_command "${SCENE}: STEP(5) Specular ablation probe" "${CMDS[6]}" "$MODEL_PATH"
-    #execute_command "${SCENE}: STEP(6) Specular probe metrics" "python3 metrics_specular_probe.py --run_dir ${MODEL_PATH} --iteration ${gs_train_iter}" "$MODEL_PATH"
-    execute_command "${SCENE}: STEP(6) Render video with generated trajectory" "${CMDS[5]}" "$MODEL_PATH"
+    execute_command "${SCENE}: STEP(5) Specular ablation probe" "${CMDS[6]}" "$MODEL_PATH"
+    execute_command "${SCENE}: STEP(6) Specular probe metrics" "python3 metrics_specular_probe.py --run_dir ${MODEL_PATH} --iteration ${gs_train_iter}" "$MODEL_PATH"
+    #execute_command "${SCENE}: STEP(6) Render video with generated trajectory" "${CMDS[5]}" "$MODEL_PATH"
 }
 
 for MODEL in "${MODELS[@]}"; do
