@@ -1,3 +1,5 @@
+This repo is built on top of and forked from: https://github.com/fanegg/Feat2GS
+
 
 <h2 align="center"> <a href="https://arxiv.org/abs/2412.09606">Feat2GS: Probing Visual Foundation Models with Gaussian Splatting</a>
 </h2>
